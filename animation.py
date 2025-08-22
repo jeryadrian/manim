@@ -1,6 +1,7 @@
 """
 Manim Animation for Logistics Optimization Algorithm Visualization
 This script creates an animated visualization of the greedy TSS location optimization process.
+Updated to use igraph instead of NetworkX for better performance.
 """
 
 from manim import *
@@ -8,7 +9,7 @@ import geopandas as gpd
 import pandas as pd
 import numpy as np
 from shapely.geometry import Point, LineString
-import networkx as nx
+import igraph as ig
 from scipy.spatial import cKDTree
 import warnings
 warnings.filterwarnings('ignore')
@@ -90,12 +91,14 @@ class LogisticsOptimizationAnimation(Scene):
         return np.array([canvas_x, canvas_y, 0])
     
     def build_network_graph(self):
-        """Build NetworkX graph from road network for routing"""
+        """Build igraph from road network for routing"""
         print("Building network graph for routing...")
         
-        self.G = nx.Graph()
-        node_id = 0
-        coord_to_node = {}
+        # Initialize data structures
+        vertices = {}  # coord -> vertex_id mapping
+        edges = []     # list of (source, target, weight) tuples
+        vertex_coords = []  # list of (x, y) coordinates
+        vertex_id = 0
         
         # Process roads to create network
         roads_processed = 0
@@ -132,25 +135,25 @@ class LogisticsOptimizationAnimation(Scene):
                         coord1 = (round(coord1[0], 2), round(coord1[1], 2))
                         coord2 = (round(coord2[0], 2), round(coord2[1], 2))
                         
-                        # Get or create nodes
-                        if coord1 not in coord_to_node:
-                            coord_to_node[coord1] = node_id
-                            self.G.add_node(node_id, pos=coord1)
-                            node_id += 1
+                        # Get or create vertices
+                        if coord1 not in vertices:
+                            vertices[coord1] = vertex_id
+                            vertex_coords.append(coord1)
+                            vertex_id += 1
                         
-                        if coord2 not in coord_to_node:
-                            coord_to_node[coord2] = node_id
-                            self.G.add_node(node_id, pos=coord2)
-                            node_id += 1
+                        if coord2 not in vertices:
+                            vertices[coord2] = vertex_id
+                            vertex_coords.append(coord2)
+                            vertex_id += 1
                         
                         # Add edge with length as weight
-                        node1_id = coord_to_node[coord1]
-                        node2_id = coord_to_node[coord2]
+                        vertex1_id = vertices[coord1]
+                        vertex2_id = vertices[coord2]
                         
-                        if node1_id != node2_id:  # Avoid self-loops
+                        if vertex1_id != vertex2_id:  # Avoid self-loops
                             length = Point(coord1).distance(Point(coord2))
                             if length > 0:  # Only add edges with positive length
-                                self.G.add_edge(node1_id, node2_id, weight=length)
+                                edges.append((vertex1_id, vertex2_id, length))
                 
                 roads_processed += 1
                 if roads_processed % 5000 == 0:
@@ -162,31 +165,34 @@ class LogisticsOptimizationAnimation(Scene):
         
         print(f"  Processed {roads_processed} roads")
         
-        # Create spatial index for snapping points to network
-        if len(self.G.nodes) > 0:
-            # Extract node positions and ensure they're 2D
-            node_positions = []
-            for n in self.G.nodes():
-                pos = self.G.nodes[n]['pos']
-                if len(pos) >= 2:
-                    node_positions.append([pos[0], pos[1]])
+        # Create igraph
+        if vertex_id > 0 and edges:
+            self.G = ig.Graph(n=vertex_id)
             
-            if node_positions:
-                self.node_coords = np.array(node_positions)
-                self.node_tree = cKDTree(self.node_coords)
-            else:
-                print("  Warning: No valid node positions found")
-                self.node_coords = np.array([])
-                self.node_tree = None
+            # Add edges
+            edge_list = [(e[0], e[1]) for e in edges]
+            weights = [e[2] for e in edges]
+            
+            self.G.add_edges(edge_list)
+            self.G.es['weight'] = weights
+            
+            # Store vertex coordinates as graph attributes
+            self.G.vs['pos'] = vertex_coords
+            
+            # Create spatial index for snapping points to network
+            self.node_coords = np.array(vertex_coords)
+            self.node_tree = cKDTree(self.node_coords)
+            
         else:
-            print("  Warning: No nodes in graph")
+            print("  Warning: No valid vertices or edges found")
+            self.G = ig.Graph()
             self.node_coords = np.array([])
             self.node_tree = None
         
-        print(f"Built network graph with {len(self.G.nodes)} nodes and {len(self.G.edges)} edges")
+        print(f"Built igraph with {self.G.vcount()} vertices and {self.G.ecount()} edges")
     
     def snap_to_network(self, point):
-        """Snap a point to the nearest network node"""
+        """Snap a point to the nearest network vertex"""
         if self.node_tree is None or len(self.node_coords) == 0:
             return None, None
             
@@ -195,20 +201,21 @@ class LogisticsOptimizationAnimation(Scene):
             dist, idx = self.node_tree.query(coord)
             
             if dist <= self.MAX_SNAP_DISTANCE:
-                node_id = list(self.G.nodes())[idx]
-                return node_id, self.G.nodes[node_id]['pos']
+                vertex_id = int(idx)
+                vertex_pos = self.G.vs[vertex_id]['pos']
+                return vertex_id, vertex_pos
         except Exception as e:
             print(f"  Error snapping point: {e}")
             
         return None, None
     
-    def calculate_routes(self, active_tss_nodes):
+    def calculate_routes(self, active_tss_vertices):
         """Calculate optimal routes for current TSS configuration"""
         routes = []
         
         for idx, origin in self.origins_gdf.iterrows():
-            origin_node, origin_pos = self.snap_to_network(origin.geometry)
-            if origin_node is None:
+            origin_vertex, origin_pos = self.snap_to_network(origin.geometry)
+            if origin_vertex is None:
                 continue
             
             # Find shortest path to CCH directly
@@ -216,17 +223,30 @@ class LogisticsOptimizationAnimation(Scene):
             best_direct_path = None
             
             for _, cch in self.cch_gdf.iterrows():
-                cch_node, cch_pos = self.snap_to_network(cch.geometry)
-                if cch_node is None:
+                cch_vertex, cch_pos = self.snap_to_network(cch.geometry)
+                if cch_vertex is None:
                     continue
                 
                 try:
-                    path = nx.shortest_path(self.G, origin_node, cch_node, weight='weight')
-                    dist = nx.shortest_path_length(self.G, origin_node, cch_node, weight='weight')
+                    # Use igraph's shortest path function
+                    path_vertices = self.G.get_shortest_paths(
+                        origin_vertex, 
+                        cch_vertex, 
+                        weights='weight',
+                        output='vpath'
+                    )[0]
                     
-                    if dist < min_direct_dist:
-                        min_direct_dist = dist
-                        best_direct_path = path
+                    if len(path_vertices) > 1:  # Valid path found
+                        # Calculate path distance
+                        dist = self.G.shortest_paths(
+                            origin_vertex, 
+                            cch_vertex, 
+                            weights='weight'
+                        )[0][0]
+                        
+                        if dist < min_direct_dist:
+                            min_direct_dist = dist
+                            best_direct_path = path_vertices
                 except:
                     continue
             
@@ -234,29 +254,53 @@ class LogisticsOptimizationAnimation(Scene):
             min_tss_dist = float('inf')
             best_tss_path = None
             
-            if active_tss_nodes:
-                for tss_node in active_tss_nodes:
+            if active_tss_vertices:
+                for tss_vertex in active_tss_vertices:
                     try:
                         # Path from origin to TSS
-                        path1 = nx.shortest_path(self.G, origin_node, tss_node, weight='weight')
-                        dist1 = nx.shortest_path_length(self.G, origin_node, tss_node, weight='weight')
+                        path1_vertices = self.G.get_shortest_paths(
+                            origin_vertex, 
+                            tss_vertex, 
+                            weights='weight',
+                            output='vpath'
+                        )[0]
+                        
+                        if len(path1_vertices) <= 1:  # No valid path
+                            continue
+                            
+                        dist1 = self.G.shortest_paths(
+                            origin_vertex, 
+                            tss_vertex, 
+                            weights='weight'
+                        )[0][0]
                         
                         # Path from TSS to nearest CCH
                         min_tss_to_cch_dist = float('inf')
                         best_tss_to_cch_path = None
                         
                         for _, cch in self.cch_gdf.iterrows():
-                            cch_node, cch_pos = self.snap_to_network(cch.geometry)
-                            if cch_node is None:
+                            cch_vertex, cch_pos = self.snap_to_network(cch.geometry)
+                            if cch_vertex is None:
                                 continue
                             
                             try:
-                                path2 = nx.shortest_path(self.G, tss_node, cch_node, weight='weight')
-                                dist2 = nx.shortest_path_length(self.G, tss_node, cch_node, weight='weight')
+                                path2_vertices = self.G.get_shortest_paths(
+                                    tss_vertex, 
+                                    cch_vertex, 
+                                    weights='weight',
+                                    output='vpath'
+                                )[0]
                                 
-                                if dist2 < min_tss_to_cch_dist:
-                                    min_tss_to_cch_dist = dist2
-                                    best_tss_to_cch_path = path2
+                                if len(path2_vertices) > 1:  # Valid path found
+                                    dist2 = self.G.shortest_paths(
+                                        tss_vertex, 
+                                        cch_vertex, 
+                                        weights='weight'
+                                    )[0][0]
+                                    
+                                    if dist2 < min_tss_to_cch_dist:
+                                        min_tss_to_cch_dist = dist2
+                                        best_tss_to_cch_path = path2_vertices
                             except:
                                 continue
                         
@@ -264,8 +308,8 @@ class LogisticsOptimizationAnimation(Scene):
                             total_dist = dist1 + min_tss_to_cch_dist
                             if total_dist < min_tss_dist:
                                 min_tss_dist = total_dist
-                                # Combine paths (remove duplicate TSS node)
-                                best_tss_path = path1 + best_tss_to_cch_path[1:]
+                                # Combine paths (remove duplicate TSS vertex)
+                                best_tss_path = path1_vertices + best_tss_to_cch_path[1:]
                     except:
                         continue
             
@@ -409,7 +453,7 @@ class LogisticsOptimizationAnimation(Scene):
         new_title.to_edge(UP)
         self.play(Transform(self.current_title, new_title))
         
-        active_tss_nodes = []
+        active_tss_vertices = []
         tss_markers = VGroup()
         current_routes = VGroup()
         
@@ -440,9 +484,9 @@ class LogisticsOptimizationAnimation(Scene):
             )
             
             # Snap to network and create TSS marker
-            tss_node, network_pos = self.snap_to_network(tss_point)
-            if tss_node is not None:
-                active_tss_nodes.append(tss_node)
+            tss_vertex, network_pos = self.snap_to_network(tss_point)
+            if tss_vertex is not None:
+                active_tss_vertices.append(tss_vertex)
                 
                 # Create connection line from pool to network
                 pool_pos = selected_pool_dot.get_center()
@@ -468,7 +512,7 @@ class LogisticsOptimizationAnimation(Scene):
                 tss_markers.add(tss_marker)
                 
                 # Calculate and animate new routes
-                new_routes = self.calculate_routes(active_tss_nodes)
+                new_routes = self.calculate_routes(active_tss_vertices)
                 
                 # Remove old routes
                 if current_routes:
@@ -480,7 +524,7 @@ class LogisticsOptimizationAnimation(Scene):
                     if len(route) < 2:
                         continue
                     
-                    route_coords = [self.G.nodes[node]['pos'] for node in route]
+                    route_coords = [self.G.vs[vertex]['pos'] for vertex in route]
                     manim_coords = [self.transform_coords(x, y) for x, y in route_coords]
                     
                     if len(manim_coords) >= 2:
@@ -570,3 +614,5 @@ if __name__ == "__main__":
     print("- input/project.gpkg")
     print("- input/cch.gpkg")
     print("- output/optimal_tss_locations.gpkg")
+    print("\nRequired packages:")
+    print("- pip install python-igraph")
