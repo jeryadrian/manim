@@ -1,0 +1,5 @@
+# Ignore input, media, output, and __pycache__ directories
+input/
+media/
+output/
+__pycache__/
