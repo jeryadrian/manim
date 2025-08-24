@@ -47,9 +47,9 @@ class LogisticsOptimizationAnimation(Scene):
         ]
         self.TSS_ROUTE_COLORS = self.TSS_MARKER_COLORS
         
-        self.POOL_SIZE = 0.05
-        self.ORIGIN_SIZE = 0.05
-        self.CCH_SIZE = 0.12
+        self.POOL_SIZE = 0.02
+        self.ORIGIN_SIZE = 0.02
+        self.CCH_SIZE = 0.10
         self.TSS_SIZE = 0.15
         
     def load_data(self):
