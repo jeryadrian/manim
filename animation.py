@@ -206,7 +206,7 @@ class LogisticsOptimizationAnimation(Scene):
             Text("Candidate Pool", font_size=28, color=self.POOL_COLOR),
             Text("Material Origins", font_size=28, color=self.ORIGIN_COLOR),
             Text("Destinations (CCH)", font_size=28, color=self.CCH_COLOR)
-        ).arrange(DOWN, aligned_edge=LEFT).to_edge(LEFT + UP).shift(DOWN * 1)
+        ).arrange(DOWN, aligned_edge=LEFT).to_edge(LEFT + DOWN).shift(UP * 1.0)
         
         self.play(
             LaggedStart(
@@ -340,6 +340,5 @@ class LogisticsOptimizationAnimation(Scene):
         self.play(*[FadeOut(mob) for mob in self.mobjects])
 
 if __name__ == "__main__":
-    print("FINAL VISUALIZATION VERSION v5 - Visualizing the 'Switch'.")
     print("\nTo render this animation, run:")
     print("manim -pql animation.py LogisticsOptimizationAnimation --disable_caching")
