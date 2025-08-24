@@ -189,17 +189,17 @@ class LogisticsOptimizationAnimation(Scene):
         
         pool_dots = VGroup()
         for _, p in self.grid_gdf.iterrows():
-            dot = Dot(self.transform_coords(p.geometry.x, p.geometry.y), radius=self.POOL_SIZE, color=self.POOL_COLOR)
+            dot = Dot(self.transform_coords(p.geometry.x, p.geometry.y), radius=self.POOL_SIZE, color=self.POOL_COLOR, stroke_width=1, stroke_color=WHITE)
             pool_dots.add(dot)
             
         origin_dots = VGroup()
         for _, o in self.origins_gdf.iterrows():
-            dot = Dot(self.transform_coords(o.geometry.x, o.geometry.y), radius=self.ORIGIN_SIZE, color=self.ORIGIN_COLOR)
+            dot = Dot(self.transform_coords(o.geometry.x, o.geometry.y), radius=self.ORIGIN_SIZE, color=self.ORIGIN_COLOR, stroke_width=1, stroke_color=WHITE)
             origin_dots.add(dot)
             
         cch_dots = VGroup()
         for _, c in self.cch_gdf.iterrows():
-            dot = Dot(self.transform_coords(c.geometry.x, c.geometry.y), radius=self.CCH_SIZE, color=self.CCH_COLOR)
+            dot = Dot(self.transform_coords(c.geometry.x, c.geometry.y), radius=self.CCH_SIZE, color=self.CCH_COLOR, stroke_width=1, stroke_color=WHITE)
             cch_dots.add(dot)
 
         labels = VGroup(
@@ -236,7 +236,7 @@ class LogisticsOptimizationAnimation(Scene):
                 active_tss_vertices.append(tss_vertex)
                 marker_color = self.TSS_MARKER_COLORS[iteration % len(self.TSS_MARKER_COLORS)]
                 network_manim_pos = self.transform_coords(network_pos[0], network_pos[1])
-                tss_marker = Star(n=6, outer_radius=self.TSS_SIZE, color=marker_color, fill_opacity=1.0).move_to(network_manim_pos)
+                tss_marker = Star(n=6, outer_radius=self.TSS_SIZE, color=marker_color, fill_opacity=1.0, stroke_width=1, stroke_color=WHITE).move_to(network_manim_pos)
                 
                 # Flash effect when placing TSS
                 self.play(
