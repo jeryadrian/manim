@@ -3,3 +3,4 @@ input/
 media/
 output/
 __pycache__/
+.venv

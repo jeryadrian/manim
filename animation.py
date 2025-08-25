@@ -17,12 +17,14 @@ warnings.filterwarnings('ignore')
 
 class LogisticsOptimizationAnimation(Scene):
     def construct(self):
+        # Set white background
+        self.camera.background_color = WHITE
+        
         self.setup_config()
         self.load_data()
         self.build_network_graph()
         self.prepare_facilities()
         
-        self.show_title()
         self.setup_base_map()
         self.show_pool_and_facilities()
         self.animate_selection_process()
@@ -34,7 +36,7 @@ class LogisticsOptimizationAnimation(Scene):
         self.SCALE_FACTOR = 0.001
         self.MAX_SNAP_DISTANCE = 500
         
-        self.ROAD_COLOR = WHITE
+        self.ROAD_COLOR = GRAY
         self.POOL_COLOR = BLUE
         self.ORIGIN_COLOR = RED
         self.CCH_COLOR = GREEN
@@ -47,10 +49,10 @@ class LogisticsOptimizationAnimation(Scene):
         ]
         self.TSS_ROUTE_COLORS = self.TSS_MARKER_COLORS
         
-        self.POOL_SIZE = 0.02
-        self.ORIGIN_SIZE = 0.02
-        self.CCH_SIZE = 0.10
-        self.TSS_SIZE = 0.15
+        self.POOL_SIZE = 0.03
+        self.ORIGIN_SIZE = 0.03
+        self.CCH_SIZE = 0.07
+        self.TSS_SIZE = 0.09
         
     def load_data(self):
         """Load all geospatial data files from disk."""
@@ -161,7 +163,7 @@ class LogisticsOptimizationAnimation(Scene):
         return routes_with_info
     
     def show_title(self):
-        title = Text("Logistics Optimization: TSS Location Selection", font_size=48)
+        title = Text("Logistics Optimization: TSS Location Selection", font_size=48, color=BLACK)
         self.play(Write(title))
         self.wait(2)
         self.play(FadeOut(title))
@@ -177,36 +179,32 @@ class LogisticsOptimizationAnimation(Scene):
                         line.set_stroke(self.ROAD_COLOR, 1, 0.7)
                         road_lines.add(line)
         
-        title = Text("Step 1: Road Network", font_size=40).to_edge(UP)
-        self.play(Write(title))
         self.play(Create(road_lines), run_time=3)
         self.wait(1)
-        self.road_lines, self.current_title = road_lines, title
+        self.road_lines = road_lines
     
     def show_pool_and_facilities(self):
-        new_title = Text("Step 2: Facilities and Candidate Pool", font_size=40).to_edge(UP)
-        self.play(Transform(self.current_title, new_title))
         
         pool_dots = VGroup()
         for _, p in self.grid_gdf.iterrows():
-            dot = Dot(self.transform_coords(p.geometry.x, p.geometry.y), radius=self.POOL_SIZE, color=self.POOL_COLOR, stroke_width=1, stroke_color=WHITE)
+            dot = Dot(self.transform_coords(p.geometry.x, p.geometry.y), radius=self.POOL_SIZE, color=self.POOL_COLOR)
             pool_dots.add(dot)
             
         origin_dots = VGroup()
         for _, o in self.origins_gdf.iterrows():
-            dot = Dot(self.transform_coords(o.geometry.x, o.geometry.y), radius=self.ORIGIN_SIZE, color=self.ORIGIN_COLOR, stroke_width=1, stroke_color=WHITE)
+            dot = Dot(self.transform_coords(o.geometry.x, o.geometry.y), radius=self.ORIGIN_SIZE, color=self.ORIGIN_COLOR)
             origin_dots.add(dot)
             
         cch_dots = VGroup()
         for _, c in self.cch_gdf.iterrows():
-            dot = Dot(self.transform_coords(c.geometry.x, c.geometry.y), radius=self.CCH_SIZE, color=self.CCH_COLOR, stroke_width=1, stroke_color=WHITE)
+            dot = Dot(self.transform_coords(c.geometry.x, c.geometry.y), radius=self.CCH_SIZE, color=self.CCH_COLOR, stroke_width=2, stroke_color=BLACK)
             cch_dots.add(dot)
 
         labels = VGroup(
             Text("Candidate Pool", font_size=28, color=self.POOL_COLOR),
-            Text("Material Origins", font_size=28, color=self.ORIGIN_COLOR),
+            Text("Origins (Project Sites)", font_size=28, color=self.ORIGIN_COLOR),
             Text("Destinations (CCH)", font_size=28, color=self.CCH_COLOR)
-        ).arrange(DOWN, aligned_edge=LEFT).to_edge(LEFT + DOWN).shift(UP * 1.0)
+        ).arrange(DOWN, aligned_edge=LEFT).to_edge(LEFT + DOWN).shift(UP * 1)
         
         self.play(
             LaggedStart(
@@ -221,8 +219,6 @@ class LogisticsOptimizationAnimation(Scene):
         self.pool_dots, self.labels = pool_dots, labels
     
     def animate_selection_process(self):
-        new_title = Text("Step 3: Greedy Selection Process", font_size=40).to_edge(UP)
-        self.play(Transform(self.current_title, new_title))
         
         active_tss_vertices, tss_markers, current_routes = [], VGroup(), VGroup()
         # Store the assignment of each origin to TSS index
@@ -236,7 +232,7 @@ class LogisticsOptimizationAnimation(Scene):
                 active_tss_vertices.append(tss_vertex)
                 marker_color = self.TSS_MARKER_COLORS[iteration % len(self.TSS_MARKER_COLORS)]
                 network_manim_pos = self.transform_coords(network_pos[0], network_pos[1])
-                tss_marker = Star(n=6, outer_radius=self.TSS_SIZE, color=marker_color, fill_opacity=1.0, stroke_width=1, stroke_color=WHITE).move_to(network_manim_pos)
+                tss_marker = Star(n=6, outer_radius=self.TSS_SIZE, color=marker_color, fill_opacity=1.0, stroke_width=2, stroke_color=BLACK).move_to(network_manim_pos)
                 
                 # Flash effect when placing TSS
                 self.play(
@@ -308,7 +304,7 @@ class LogisticsOptimizationAnimation(Scene):
 
                 current_routes = VGroup(stable_routes_vgroup, switched_routes_vgroup)
                 
-                progress_text = Text(f"TSS {iteration + 1}/{len(self.optimal_tss_gdf)} placed", font_size=32, color=YELLOW).to_edge(RIGHT + UP).shift(DOWN * 1)
+                progress_text = Text(f"TSS {iteration + 1}/{len(self.optimal_tss_gdf)} placed", font_size=32, color=BLACK).to_edge(RIGHT + UP).shift(DOWN * 1)
                 if iteration == 0: 
                     self.play(Write(progress_text))
                     self.progress_text = progress_text
@@ -320,8 +316,6 @@ class LogisticsOptimizationAnimation(Scene):
         self.tss_markers = tss_markers
     
     def show_final_state(self):
-        final_title = Text("Final Optimized Network", font_size=40).to_edge(UP)
-        self.play(Transform(self.current_title, final_title))
         self.play(
             FadeOut(self.pool_dots), 
             FadeOut(self.labels), 
@@ -330,12 +324,6 @@ class LogisticsOptimizationAnimation(Scene):
         )
         self.play(self.tss_markers.animate.scale(1.5))
         
-        summary_text = VGroup(
-            Text(f"Selected {len(self.optimal_tss_gdf)} optimal TSS locations", font_size=28),
-            Text("Routes optimized to minimize transport effort", font_size=28)
-        ).arrange(DOWN, aligned_edge=LEFT).to_edge(LEFT + DOWN).shift(UP * 1)
-        
-        self.play(Write(summary_text))
         self.wait(4)
         self.play(*[FadeOut(mob) for mob in self.mobjects])
 
