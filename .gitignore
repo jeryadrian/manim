@@ -4,3 +4,4 @@ media/
 output/
 __pycache__/
 .venv
+requirements.txt
